@@ -3,14 +3,19 @@ output "availability_set_resource_id" {
   value       = try(azurerm_availability_set.this[0].id, null)
 }
 
-output "vm_resource_ids" {
-  description = "Map of VM key (fw1, fw2, ...) → VM resource ID."
-  value       = { for k, m in module.vmseries : k => m.virtual_machine.id }
+output "vm_names" {
+  description = "Map of VM key (fw1, fw2, ...) → VM name."
+  value       = { for k, m in module.vmseries : k => "${local._name_prefix}${k}001" }
 }
 
-output "vm_names" {
-  description = "Map of VM key → VM name."
-  value       = { for k, m in module.vmseries : k => m.virtual_machine.name }
+output "mgmt_ip_addresses" {
+  description = "Map of VM key → management IP. Passthrough from the underlying Palo Alto vmseries module (private IP since mgmt NICs have no PIP in this module)."
+  value       = { for k, m in module.vmseries : k => m.mgmt_ip_address }
+}
+
+output "vm_interfaces" {
+  description = "Map of VM key → NIC map (from the vmseries sub-module). Keys at the inner level are the NIC names (e.g. `nic-mgmt-<vm_name>`)."
+  value       = { for k, m in module.vmseries : k => m.interfaces }
 }
 
 output "public_lb_resource_id" {
@@ -29,6 +34,6 @@ output "internal_lb_resource_id" {
 }
 
 output "internal_lb_frontend_ip_address" {
-  description = "Front-end private IP of the internal LB. Becomes `hub_router_ip_address` in the consumer hub repo (trust-side next-hop for downstream UDRs)."
+  description = "Front-end private IP of the internal LB. Becomes `hub_router_ip_address` in the consumer hub repo (trust-side next-hop for downstream UDRs). Echo of `var.internal_lb_frontend_private_ip_address`."
   value       = var.internal_lb_frontend_private_ip_address
 }

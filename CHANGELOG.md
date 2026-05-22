@@ -2,6 +2,13 @@
 
 All notable changes to this module are documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-05-22
+
+### Fixed
+
+- **Outputs referenced non-existent vmseries module attributes.** v0.1.0's `vm_resource_ids` + `vm_names` referenced `module.vmseries[k].virtual_machine.id` / `.name`, but the underlying `PaloAltoNetworks/swfw-modules/azurerm//modules/vmseries` doesn't expose a `virtual_machine` output. Terraform deferred the type-check inside the for-loop so `terraform validate` passed at module-build time, but any consumer reading these outputs would error at plan.
+- **Fix**: replaced with what the underlying module actually exposes — `mgmt_ip_addresses` (passthrough) + `vm_interfaces` (NIC map) — and computed `vm_names` from the deterministic name prefix.
+
 ## [0.1.0] - 2026-05-22
 
 ### Added

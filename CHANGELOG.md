@@ -2,6 +2,20 @@
 
 All notable changes to this module are documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-05-22
+
+### Added
+
+- **NSG creation** for the 3 firewall subnets (mgmt/trust/untrust). Module owns the NSG resources (named via `nsg_names` input, with sensible CAF defaults). Default security rules match the BBSWE current scc.nva.tf pattern: untrust allows Internet inbound; trust + mgmt allow VirtualNetwork inbound. Caller can extend per-NSG via `additional_nsg_rules`.
+- **Route Table creation** for trust + untrust subnets. Each carries a cross-region UDR (peer-region spoke CIDR → peer-region NVA IP). Ingress RT additionally carries optional downstream spoke routes pointing at the local NVA (LLD §6.6).
+- New inputs: `create_nsgs`, `nsg_names`, `additional_nsg_rules`, `create_route_tables`, `route_table_names`, `peer_region_cidr`, `peer_nva_ip`, `local_nva_ip`, `downstream_spoke_routes`.
+- New outputs: `nsg_resource_ids`, `route_table_resource_ids`.
+
+### Compatibility
+
+- New features default-off-ish: `create_nsgs` + `create_route_tables` both default to `true` (matching BBSWE's expected usage). Set false to opt out.
+- v0.1.x consumers that DIDN'T have the module create NSGs/RTs (because v0.1.x couldn't) now will. Coordinate with caller-side scc.nva.tf to either accept module ownership OR set the toggles to false.
+
 ## [0.1.1] - 2026-05-22
 
 ### Fixed

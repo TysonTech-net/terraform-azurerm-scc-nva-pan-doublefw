@@ -208,6 +208,92 @@ variable "existing_subnet_ids" {
 }
 
 ###############################################################################
+# NSGs (3 per region: mgmt, trust, untrust)
+###############################################################################
+# v0.2.0: module creates the 3 firewall-subnet NSGs by default. The
+# AVM-hub-VNet pattern attaches NSGs to subnets inline via constructed
+# resource IDs (no standalone association needed), so naming consistency is
+# all that's required. Set `create_nsgs = false` if the caller wants to own
+# the NSGs externally (e.g. shared NSG owned by a different module).
+
+variable "create_nsgs" {
+  description = "When true (default), the module creates 3 NSGs (mgmt/trust/untrust) for the firewall subnets. Set false if NSGs are owned externally."
+  type        = bool
+  default     = true
+}
+
+variable "nsg_names" {
+  description = "NSG names. Required when `create_nsgs = true`. Caller supplies CAF-style names matching the accelerator-side subnet NSG ID convention."
+  type = object({
+    mgmt    = optional(string)
+    trust   = optional(string)
+    untrust = optional(string)
+  })
+  default = {}
+}
+
+variable "additional_nsg_rules" {
+  description = "Extra security rules per NSG (mgmt/trust/untrust), merged with the module defaults. Module defaults: untrust allows Internet inbound; trust + mgmt allow VirtualNetwork inbound."
+  type = object({
+    mgmt    = optional(map(any), {})
+    trust   = optional(map(any), {})
+    untrust = optional(map(any), {})
+  })
+  default = {}
+}
+
+###############################################################################
+# Route Tables (2 per region: egress + ingress)
+###############################################################################
+# v0.2.0: module creates 2 route tables attached to the trust + untrust
+# firewall subnets. Each carries a cross-region UDR pointing peer-region
+# spoke traffic at the peer-region NVA's IP (symmetric cross-region inspection).
+# The ingress (untrust) RT also carries optional downstream spoke routes
+# pointing to the local NVA.
+
+variable "create_route_tables" {
+  description = "When true (default), the module creates 2 route tables (egress + ingress) attached to the trust + untrust subnets respectively."
+  type        = bool
+  default     = true
+}
+
+variable "route_table_names" {
+  description = "Route table names. Required when `create_route_tables = true`."
+  type = object({
+    egress  = optional(string) # attached to trust subnet
+    ingress = optional(string) # attached to untrust subnet
+  })
+  default = {}
+}
+
+variable "peer_region_cidr" {
+  description = "CIDR of the peer region's address space. Used as the destination of the cross-region UDR. Required when `create_route_tables = true`."
+  type        = string
+  default     = null
+}
+
+variable "peer_nva_ip" {
+  description = "Private IP of the peer region's NVA (LB front-end or single-VM trust NIC). Used as `next_hop_in_ip_address` for the cross-region UDR. Required when `create_route_tables = true`."
+  type        = string
+  default     = null
+}
+
+variable "local_nva_ip" {
+  description = "Private IP of THIS region's NVA (typically equals `internal_lb_frontend_private_ip_address`). Used as next-hop for downstream spoke routes on the ingress RT. Required if `downstream_spoke_routes` is non-empty."
+  type        = string
+  default     = null
+}
+
+variable "downstream_spoke_routes" {
+  description = "Extra routes added to the INGRESS route table (untrust subnet) forwarding spoke traffic to the LOCAL NVA for symmetric inspection. e.g. AVD-customer spokes per LLD §6.6."
+  type = map(object({
+    name           = string
+    address_prefix = string
+  }))
+  default = {}
+}
+
+###############################################################################
 # Tags
 ###############################################################################
 

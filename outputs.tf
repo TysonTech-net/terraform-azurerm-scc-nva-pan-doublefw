@@ -37,3 +37,20 @@ output "internal_lb_frontend_ip_address" {
   description = "Front-end private IP of the internal LB. Becomes `hub_router_ip_address` in the consumer hub repo (trust-side next-hop for downstream UDRs). Echo of `var.internal_lb_frontend_private_ip_address`."
   value       = var.internal_lb_frontend_private_ip_address
 }
+
+output "nsg_resource_ids" {
+  description = "Map of NSG role → resource ID (mgmt/trust/untrust). Empty when `create_nsgs = false`."
+  value = {
+    mgmt    = try(module.nsg_mgmt[0].resource_id, null)
+    trust   = try(module.nsg_trust[0].resource_id, null)
+    untrust = try(module.nsg_untrust[0].resource_id, null)
+  }
+}
+
+output "route_table_resource_ids" {
+  description = "Map of RT role → resource ID (egress/ingress). Empty when `create_route_tables = false`."
+  value = {
+    egress  = try(module.route_table_egress[0].resource_id, null)
+    ingress = try(module.route_table_ingress[0].resource_id, null)
+  }
+}

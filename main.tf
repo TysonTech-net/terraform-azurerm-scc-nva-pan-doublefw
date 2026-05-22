@@ -63,6 +63,176 @@ check "internal_lb_static_ip_in_trust_subnet" {
 }
 
 ###############################################################################
+# NSGs (3 firewall subnets — mgmt / trust / untrust)
+###############################################################################
+# AVM-hub-VNet pattern: subnets carry NSG ID inline via constructed strings,
+# so the NSG resource just needs to exist with a name matching what the
+# accelerator-side tfvars references. No standalone azurerm_subnet_network_security_group_association
+# needed (the AVM hub VNet module attaches inline at subnet create time).
+
+locals {
+  _nsg_mgmt_name    = local._create_nsgs ? coalesce(var.nsg_names.mgmt, "nsg-snet-fw-mgmt-${local._region_short}-001") : null
+  _nsg_trust_name   = local._create_nsgs ? coalesce(var.nsg_names.trust, "nsg-snet-fw-private-${local._region_short}-001") : null
+  _nsg_untrust_name = local._create_nsgs ? coalesce(var.nsg_names.untrust, "nsg-snet-fw-public-${local._region_short}-001") : null
+  _create_nsgs      = var.create_nsgs
+
+  # Default security rules per NSG role. Caller can extend via var.additional_nsg_rules.
+  _default_nsg_rules_untrust = {
+    allow_internet_inbound = {
+      name                       = "allow-internet-inbound"
+      access                     = "Allow"
+      direction                  = "Inbound"
+      priority                   = 1000
+      protocol                   = "*"
+      source_port_range          = "*"
+      destination_port_range     = "*"
+      source_address_prefix      = "Internet"
+      destination_address_prefix = "*"
+    }
+  }
+  _default_nsg_rules_trust = {
+    allow_vnet_inbound = {
+      name                       = "allow-vnet-inbound"
+      access                     = "Allow"
+      direction                  = "Inbound"
+      priority                   = 1000
+      protocol                   = "*"
+      source_port_range          = "*"
+      destination_port_range     = "*"
+      source_address_prefix      = "VirtualNetwork"
+      destination_address_prefix = "*"
+    }
+  }
+  _default_nsg_rules_mgmt = {
+    allow_vnet_inbound = {
+      name                       = "allow-vnet-inbound"
+      access                     = "Allow"
+      direction                  = "Inbound"
+      priority                   = 1000
+      protocol                   = "*"
+      source_port_range          = "*"
+      destination_port_range     = "*"
+      source_address_prefix      = "VirtualNetwork"
+      destination_address_prefix = "*"
+    }
+  }
+}
+
+module "nsg_mgmt" {
+  count   = local._create_nsgs ? 1 : 0
+  source  = "Azure/avm-res-network-networksecuritygroup/azurerm"
+  version = "~> 0.5"
+
+  name                = local._nsg_mgmt_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  enable_telemetry    = false
+  tags                = var.tags
+
+  security_rules = merge(local._default_nsg_rules_mgmt, var.additional_nsg_rules.mgmt)
+}
+
+module "nsg_trust" {
+  count   = local._create_nsgs ? 1 : 0
+  source  = "Azure/avm-res-network-networksecuritygroup/azurerm"
+  version = "~> 0.5"
+
+  name                = local._nsg_trust_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  enable_telemetry    = false
+  tags                = var.tags
+
+  security_rules = merge(local._default_nsg_rules_trust, var.additional_nsg_rules.trust)
+}
+
+module "nsg_untrust" {
+  count   = local._create_nsgs ? 1 : 0
+  source  = "Azure/avm-res-network-networksecuritygroup/azurerm"
+  version = "~> 0.5"
+
+  name                = local._nsg_untrust_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  enable_telemetry    = false
+  tags                = var.tags
+
+  security_rules = merge(local._default_nsg_rules_untrust, var.additional_nsg_rules.untrust)
+}
+
+###############################################################################
+# Route Tables (egress on trust, ingress on untrust)
+###############################################################################
+# Each RT carries a cross-region UDR (peer-region spoke CIDR → peer-region NVA IP).
+# The ingress RT additionally carries optional downstream spoke routes pointing
+# at the LOCAL NVA for symmetric inspection (e.g. AVD-customer spokes per LLD §6.6).
+
+locals {
+  _create_rts      = var.create_route_tables
+  _rt_egress_name  = local._create_rts ? coalesce(var.route_table_names.egress, "rt-fw-egress-${local._region_short}-001") : null
+  _rt_ingress_name = local._create_rts ? coalesce(var.route_table_names.ingress, "rt-fw-ingress-${local._region_short}-001") : null
+}
+
+module "route_table_egress" {
+  count   = local._create_rts ? 1 : 0
+  source  = "Azure/avm-res-network-routetable/azurerm"
+  version = "~> 0.5"
+
+  name                          = local._rt_egress_name
+  location                      = var.location
+  resource_group_name           = var.resource_group_name
+  bgp_route_propagation_enabled = true
+  enable_telemetry              = false
+  tags                          = var.tags
+
+  routes = {
+    cross_region = {
+      name                   = "to-peer-region-via-peer-nva"
+      address_prefix         = var.peer_region_cidr
+      next_hop_type          = "VirtualAppliance"
+      next_hop_in_ip_address = var.peer_nva_ip
+    }
+  }
+
+  subnet_resource_ids = { firewall_trust = var.existing_subnet_ids.trust }
+}
+
+module "route_table_ingress" {
+  count   = local._create_rts ? 1 : 0
+  source  = "Azure/avm-res-network-routetable/azurerm"
+  version = "~> 0.5"
+
+  name                          = local._rt_ingress_name
+  location                      = var.location
+  resource_group_name           = var.resource_group_name
+  bgp_route_propagation_enabled = true
+  enable_telemetry              = false
+  tags                          = var.tags
+
+  routes = merge(
+    {
+      cross_region = {
+        name                   = "to-peer-region-via-peer-nva"
+        address_prefix         = var.peer_region_cidr
+        next_hop_type          = "VirtualAppliance"
+        next_hop_in_ip_address = var.peer_nva_ip
+      }
+    },
+    {
+      for spoke_key, route in var.downstream_spoke_routes :
+      "spoke_${spoke_key}" => {
+        name                   = route.name
+        address_prefix         = route.address_prefix
+        next_hop_type          = "VirtualAppliance"
+        next_hop_in_ip_address = var.local_nva_ip
+      }
+    }
+  )
+
+  subnet_resource_ids = { firewall_untrust = var.existing_subnet_ids.untrust }
+}
+
+###############################################################################
 # Availability Set (single — all common-architecture VMs share one RG)
 ###############################################################################
 resource "azurerm_availability_set" "this" {

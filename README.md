@@ -104,6 +104,19 @@ See `variables.tf` for the full schema. Required:
 
 - Promotion to stable after BBSWE end-to-end production validation.
 
+## Deviations from the ARM template
+
+This module is derived from the `paloaltonetworks/vmseries-ngfw/doublefw` Azure Marketplace solution template but is NOT a strict 1:1 clone. Two deliberate deviations:
+
+| What | ARM template | This module | Why |
+|---|---|---|---|
+| Route Tables | None — ARM template is single-region scope | 2 RTs (egress + ingress) with cross-region UDRs + optional downstream spoke routes | Multi-region NVA topology (e.g. BBSWE UKS↔UKW per LLD §6.6) needs cross-region UDRs to force symmetric inspection. Single-region consumers can opt out via `create_route_tables = false`. |
+| Per-VM mgmt PIPs | Optional public IPs on each VM's management NIC for admin access | Not exposed (no public IP on mgmt NICs) | BBSWE accesses mgmt via Bastion in the hub VNet, not direct public IPs. Reduces attack surface. |
+
+For strict ARM-template-equivalent deployments, set `create_route_tables = false` and add per-VM mgmt PIPs out-of-band.
+
+Additionally, v0.2.0 implements only the `common` architecture; the `inbound` / `outbound` / `dedicated-in-out` variants are schema-declared but unimplemented. See "Roadmap".
+
 ## Why wrap PaloAltoNetworks/swfw-modules
 
 v0.1.0 builds on `PaloAltoNetworks/swfw-modules/azurerm` (`vmseries` + `loadbalancer` sub-modules) rather than reimplementing from `azurerm_virtual_machine` + `azurerm_lb` primitives. Rationale:

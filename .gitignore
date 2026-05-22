@@ -1,0 +1,23 @@
+# Terraform state + module cache
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Sensitive
+*.tfvars
+*.tfvars.json
+!example.tfvars
+!example.tfvars.json
+.envrc
+.envvars
+.env
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*~

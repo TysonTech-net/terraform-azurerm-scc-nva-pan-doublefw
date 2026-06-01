@@ -28,11 +28,14 @@ locals {
   _backend_pool_public = "bep-fw-public-${local._region_short}"
   _backend_pool_intl   = "bep-fw-internal-${local._region_short}"
 
-  # Per-VM zones list (cycled when count > zones)
+  # Per-VM zones list (cycled when count > zones). Map keys are zero-padded
+  # instance numbers ("001", "002", ...) so consumed names become e.g.
+  # `${prefix}001`, `${prefix}002` — the conventional Azure / LLD naming pattern
+  # for instance-numbered VMs.
   _zones = var.availability_zone_config.zones
   _zone_for_vm = {
     for i in range(var.firewall_vm_count) :
-    format("fw%d", i + 1) => element(local._zones, i % length(local._zones))
+    format("%03d", i + 1) => element(local._zones, i % length(local._zones))
   }
 
   _use_avset = var.availability_option == "Availability Set"
@@ -312,9 +315,9 @@ module "vmseries" {
   source  = "PaloAltoNetworks/swfw-modules/azurerm//modules/vmseries"
   version = "~> 3.5"
 
-  for_each = toset([for i in range(var.firewall_vm_count) : format("fw%d", i + 1)])
+  for_each = toset([for i in range(var.firewall_vm_count) : format("%03d", i + 1)])
 
-  name                = "${local._name_prefix}${each.key}001"
+  name                = "${local._name_prefix}${each.key}"
   region              = var.location
   resource_group_name = var.resource_group_name
 
@@ -338,7 +341,7 @@ module "vmseries" {
     zone                       = local._use_avset ? null : local._zone_for_vm[each.key]
     avset_id                   = local._use_avset ? azurerm_availability_set.this[0].id : null
     disk_type                  = var.disk_type
-    disk_name                  = "osdisk-${local._name_prefix}${each.key}001"
+    disk_name                  = "osdisk-${local._name_prefix}${each.key}"
     bootstrap_options          = var.custom_data
     encryption_at_host_enabled = var.encryption_at_host_enabled
     allow_extension_operations = false
@@ -347,7 +350,7 @@ module "vmseries" {
 
   interfaces = [
     {
-      name      = "nic-mgmt-${local._name_prefix}${each.key}001"
+      name      = "nic-mgmt-${local._name_prefix}${each.key}"
       subnet_id = var.existing_subnet_ids.management
       ip_configurations = {
         primary = {
@@ -358,7 +361,7 @@ module "vmseries" {
       }
     },
     {
-      name                      = "nic-untrust-${local._name_prefix}${each.key}001"
+      name                      = "nic-untrust-${local._name_prefix}${each.key}"
       subnet_id                 = var.existing_subnet_ids.untrust
       attach_to_lb_backend_pool = true
       lb_backend_pool_id        = module.lb_public.backend_pool_id
@@ -371,7 +374,7 @@ module "vmseries" {
       }
     },
     {
-      name                      = "nic-trust-${local._name_prefix}${each.key}001"
+      name                      = "nic-trust-${local._name_prefix}${each.key}"
       subnet_id                 = var.existing_subnet_ids.trust
       attach_to_lb_backend_pool = true
       lb_backend_pool_id        = module.lb_internal.backend_pool_id

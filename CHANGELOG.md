@@ -2,6 +2,15 @@
 
 All notable changes to this module are documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-06-01
+
+### Changed
+
+- **BREAKING**: VM naming pattern. The per-VM map keys and the resulting VM names are now zero-padded instance numbers (`001`, `002`) instead of `fw1`/`fw2`. Names go from `${prefix}fw1001` / `${prefix}fw2001` → `${prefix}001` / `${prefix}002`. Matches the conventional Azure / LLD `vmfw{customer}{region}{NNN}` naming pattern; the `fw{N}{instance}` shape was an accidental artefact of the v0.1.0 module's per-VM key naming.
+- Affects: VM name, OS disk name, 3× NIC names (mgmt/trust/untrust) per VM.
+- Output `vm_names` map keys change from `fw1`/`fw2` to `001`/`002`. Same for `mgmt_ip_addresses` + `vm_interfaces`. Consumers iterating the map (rather than key-lookup) are unaffected; key-lookup consumers need updating.
+- Re-applying against state created with v0.2.0 or v0.2.1 forces destroy+recreate of the VM-Series HA pair (rename = recreate in Azure).
+
 ## [0.2.0] - 2026-05-22
 
 ### Added

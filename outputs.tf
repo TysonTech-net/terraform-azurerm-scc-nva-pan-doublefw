@@ -4,8 +4,8 @@ output "availability_set_resource_id" {
 }
 
 output "vm_names" {
-  description = "Map of VM key (fw1, fw2, ...) → VM name."
-  value       = { for k, m in module.vmseries : k => "${local._name_prefix}${k}001" }
+  description = "Map of VM key (instance number 001, 002, ...) → VM name."
+  value       = { for k, m in module.vmseries : k => "${local._name_prefix}${k}" }
 }
 
 output "mgmt_ip_addresses" {
